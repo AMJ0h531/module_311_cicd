@@ -3,6 +3,7 @@ pipeline {
     
     tools {
         maven 'Maven-3'
+        jdk 'Java 21'
     }
     
     stages {
@@ -15,13 +16,13 @@ pipeline {
         
         stage('Build') {
             steps {
-                sh 'mvn clean compile'
+                bat 'mvn clean compile'
             }
         }
         
         stage('Test') {
             steps {
-                sh 'mvn test'
+                bat 'mvn test'
             }
         }
         
@@ -35,7 +36,7 @@ pipeline {
         
         stage('Package') {
             steps {
-                sh 'mvn package -DskipTests'
+                bat 'mvn package -DskipTests'
             }
         }
         
