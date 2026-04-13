@@ -337,7 +337,19 @@ docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
 5. Install suggested plugins
 6. Create admin user
 
-### Lab Part 2: Configure Maven in Jenkins (15 min)
+### Lab Part 2: Configure JDK in Jenkins (10 min)
+
+1. Go to **Manage Jenkins → Tools**
+2. Scroll to **JDK installations**
+3. Click **Add JDK**
+4. Uncheck "Install automatically"
+5. Name: `Java 21`
+6. JAVA_HOME: enter the path to your JDK 21 installation (e.g., `C:\Users\YourName\java\jdk-21.0.10+7`)
+7. Save
+
+> **Why this matters:** If your `pom.xml` targets Java 21 but Jenkins uses a different JDK, you'll get `invalid target release: 21`. The `jdk` tool in your Jenkinsfile must match this name exactly.
+
+### Lab Part 3: Configure Maven in Jenkins (10 min)
 
 1. Go to **Manage Jenkins → Tools**
 2. Scroll to **Maven installations**
@@ -347,7 +359,7 @@ docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
 6. Select a recent version
 7. Save
 
-### Lab Part 3: Jenkins Plugins (10 min)
+### Lab Part 4: Jenkins Plugins (10 min)
 
 Go to **Manage Jenkins → Plugins → Available plugins**
 
@@ -355,10 +367,11 @@ Install these if not already present:
 - **Git plugin** (usually pre-installed)
 - **Pipeline** (usually pre-installed)
 - **Maven Integration**
+- **SonarQube Scanner** (needed for Block 6)
 
-> **Instructor note:** Explain that plugins are how Jenkins becomes powerful — there's a plugin for almost everything (SonarQube, Docker, Slack, etc.)
+> **Instructor note:** Explain that plugins are how Jenkins becomes powerful — there's a plugin for almost everything (SonarQube, Docker, Slack, etc.). Installing the SonarQube Scanner plugin now saves time later.
 
-### Lab Part 4: Create Your First Jenkins Job (25 min)
+### Lab Part 5: Create Your First Jenkins Job (25 min)
 
 **Freestyle Job:**
 
@@ -376,7 +389,7 @@ Install these if not already present:
 
 **Discussion:** What just happened? Jenkins pulled code, built it, ran tests, and archived the output — automatically!
 
-### Lab Part 5: Scheduled Jenkins Jobs (10 min)
+### Lab Part 6: Scheduled Jenkins Jobs (10 min)
 
 Explain cron syntax in Jenkins:
 ```
@@ -432,6 +445,7 @@ pipeline {
     
     tools {
         maven 'Maven-3'
+        jdk 'Java 21'
     }
     
     stages {
@@ -444,19 +458,19 @@ pipeline {
         
         stage('Build') {
             steps {
-                sh 'mvn clean compile'
+                bat 'mvn clean compile'
             }
         }
         
         stage('Test') {
             steps {
-                sh 'mvn test'
+                bat 'mvn test'
             }
         }
         
         stage('Package') {
             steps {
-                sh 'mvn package -DskipTests'
+                bat 'mvn package -DskipTests'
             }
         }
     }
@@ -479,10 +493,12 @@ pipeline {
 **Walk through each section:**
 - `pipeline` — wrapper for everything
 - `agent any` — run on any available executor
-- `tools` — auto-install and configure tools
+- `tools` — auto-install and configure tools (`jdk 'Java 21'` must match the name in Jenkins Global Tool Configuration)
 - `stages` / `stage` — logical groups of work
-- `steps` — actual commands
+- `steps` — actual commands (use `bat` on Windows, `sh` on Linux/Mac)
 - `post` — runs after all stages (like finally block)
+
+> **Common pitfall:** If your `pom.xml` targets Java 21 but you forget the `jdk 'Java 21'` line, you'll get `error: invalid target release: 21`. The tool name must match exactly what you configured in Manage Jenkins → Tools.
 
 ### 5.4 The Jenkinsfile (10 min)
 
@@ -534,9 +550,68 @@ Jenkins detects change
    Results Dashboard
 ```
 
-### Exercise: Complete CI/CD Jenkinsfile
+### Exercise: Set Up SonarQube Locally & Configure Jenkins Integration
 
-Extend the Jenkinsfile from Block 5 to include a code quality stage:
+#### Step 1: Install SonarQube (15 min)
+
+**Option A: Direct Install (Recommended if Docker is not available)**
+
+1. Download SonarQube Community Edition from https://www.sonarsource.com/products/sonarqube/downloads/
+2. Extract the zip to a folder (e.g., `C:\Users\YourName\sonarqube\`)
+3. Open a terminal and run:
+
+**Windows:**
+```powershell
+& "C:\Users\YourName\sonarqube\sonarqube-25.x.x\bin\windows-x86-64\StartSonar.bat"
+```
+
+**Mac/Linux:**
+```bash
+./sonarqube-25.x.x/bin/linux-x86-64/sonar.sh start
+```
+
+4. Wait for all three processes to start (Elasticsearch, Web Server, Compute Engine)
+5. Navigate to **http://localhost:9000**
+6. Log in with default credentials: **admin / admin**
+7. You will be prompted to change the password on first login
+
+**Option B: Docker**
+```bash
+docker run -d --name sonarqube -p 9000:9000 sonarqube:community
+```
+
+> **Note:** SonarQube requires Java 17+. It bundles its own JRE, but your system Java should be 17+ as well.
+
+#### Step 2: Generate a SonarQube Token (5 min)
+
+1. In SonarQube (http://localhost:9000), click your **profile avatar** (top-right)
+2. Click **"My Account"**
+3. Click the **"Security"** tab
+4. Under **"Generate Tokens"**:
+   - Name: `jenkins`
+   - Type: **Global Analysis Token**
+   - Click **Generate**
+5. **Copy the token** — you won’t be able to see it again!
+
+#### Step 3: Configure SonarQube in Jenkins (10 min)
+
+1. Go to **Jenkins → Manage Jenkins → Credentials**
+2. Click **(global)** → **Add Credentials**
+   - Kind: **Secret text**
+   - Secret: paste the token from Step 2
+   - ID: `sonarqube-token`
+   - Description: `SonarQube Token`
+   - Click **Create**
+3. Go to **Jenkins → Manage Jenkins → System**
+4. Scroll to **SonarQube servers** → click **Add SonarQube**
+   - Name: `SonarQube` (this must match your Jenkinsfile)
+   - Server URL: `http://localhost:9000`
+   - Server authentication token: select the `sonarqube-token` credential
+5. Click **Save**
+
+#### Step 4: Update the Jenkinsfile (15 min)
+
+Extend the Jenkinsfile from Block 5 to include a code quality stage with SonarQube:
 
 ```groovy
 pipeline {
@@ -544,6 +619,7 @@ pipeline {
     
     tools {
         maven 'Maven-3'
+        jdk 'Java 21'
     }
     
     stages {
@@ -556,38 +632,34 @@ pipeline {
         
         stage('Build') {
             steps {
-                sh 'mvn clean compile'
+                bat 'mvn clean compile'
             }
         }
         
         stage('Test') {
             steps {
-                sh 'mvn test'
+                bat 'mvn test'
             }
         }
         
         stage('Code Quality') {
             steps {
-                // If SonarQube is configured:
-                // withSonarQubeEnv('SonarQube') {
-                //     sh 'mvn sonar:sonar'
-                // }
-                
-                // For today, run static analysis with Maven:
-                sh 'mvn checkstyle:check'
+                withSonarQubeEnv('SonarQube') {
+                    bat 'mvn sonar:sonar'
+                }
             }
         }
         
         stage('Package') {
             steps {
-                sh 'mvn package -DskipTests'
+                bat 'mvn package -DskipTests'
             }
         }
         
         stage('Deploy to Staging') {
             steps {
                 echo 'Deploying to staging environment...'
-                // In real life: sh 'deploy-script.sh staging'
+                // In real life: bat 'deploy-script.bat staging'
             }
         }
         
@@ -598,7 +670,7 @@ pipeline {
             }
             steps {
                 echo 'Deploying to production...'
-                // In real life: sh 'deploy-script.sh production'
+                // In real life: bat 'deploy-script.bat production'
             }
         }
     }
@@ -616,19 +688,20 @@ pipeline {
 ```
 
 **Key things to notice:**
+- `jdk 'Java 21'` — ensures Jenkins uses the correct JDK (must match Global Tool Configuration)
+- `withSonarQubeEnv('SonarQube')` — injects the SonarQube server URL and token as environment variables so `mvn sonar:sonar` knows where to send results
 - The `Code Quality` stage runs **after** tests pass
 - The `Deploy to Production` stage uses `input` for **manual approval** (Continuous Delivery pattern)
+- `bat` is used for Windows; replace with `sh` on Linux/Mac
 - `post` block handles success/failure notifications
 
 ### Stretch Goal
 
-If time permits and SonarQube is running (via Docker):
-
-```bash
-docker run -d --name sonarqube -p 9000:9000 sonarqube:community
-```
-
-Install the **SonarQube Scanner** plugin in Jenkins, configure the server connection, and replace the Code Quality stage with a real SonarQube scan.
+After the SonarQube scan completes, visit **http://localhost:9000** and explore the project dashboard:
+- How many bugs, vulnerabilities, and code smells were found?
+- Did the project pass the default Quality Gate?
+- Click into individual issues to see the rule descriptions and suggested fixes
+- Compare what SonarQube found vs. what SonarLint showed in your IDE earlier
 
 ---
 
@@ -670,13 +743,17 @@ In your capstone project, you should:
 
 ### Common Issues
 - Jenkins requires Java 11+ — verify before class
+- **JDK mismatch:** If `pom.xml` targets Java 21 but Jenkins uses a different JDK, the build fails with `invalid target release: 21`. Fix: add `jdk 'Java 21'` to the `tools` block and configure the JDK in Jenkins Global Tool Configuration
+- **`sh` vs `bat`:** Use `bat` for Windows agents, `sh` for Linux/Mac. Mixing them causes "command not found" errors
 - Docker might need WSL2 on Windows
 - Port 8080 conflicts (Tomcat, other services) — use `-p 8081:8080` if needed
-- SonarQube needs at least 2GB RAM for Docker
+- SonarQube needs at least 2GB RAM and Java 17+
+- SonarQube first startup can take several minutes — wait for all 3 processes (Elasticsearch, Web, Compute Engine) before accessing http://localhost:9000
+- **SonarQube token:** The `withSonarQubeEnv('SonarQube')` name must match exactly what's configured in Manage Jenkins → System → SonarQube servers
 
 ### Prerequisites
 - Git installed and configured
-- Java 11+ installed
-- Docker installed (recommended) OR direct Jenkins installer
+- Java 17+ installed (required for SonarQube; Java 21 recommended for project builds)
+- Docker installed (optional) OR direct SonarQube/Jenkins installers
 - An IDE with SonarLint support (IntelliJ or VS Code)
 - A simple Maven project to use for labs (provide a class repo if needed)
