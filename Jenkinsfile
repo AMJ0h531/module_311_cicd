@@ -25,24 +25,47 @@ pipeline {
                 bat 'mvn test'
             }
         }
+
+         stage('Code Quality') {
+            steps {
+                withSonarQubeEnv('SonarQube') {
+                    bat 'mvn sonar:sonar'
+                }
+            }
+        }
         
         stage('Package') {
             steps {
                 bat 'mvn package -DskipTests'
             }
         }
+
+        stage('Deploy to Staging') {
+            steps {
+                echo 'Deploying to staging environment...'
+                // In real life: bat 'deploy-script.bat staging'
+            }
+        }
+        
+        stage('Deploy to Production') {
+            input {
+                message 'Deploy to production?'
+                ok 'Yes, deploy!'
+            }
+            steps {
+                echo 'Deploying to production...'
+                // In real life: bat 'deploy-script.bat production'
+            }
+        }
     }
     
-    post {
+     post {
         success {
-            echo 'Build succeeded!'
+            echo 'Full pipeline succeeded!'
             archiveArtifacts artifacts: 'target/*.jar'
         }
         failure {
-            echo 'Build failed!'
-        }
-        always {
-            echo 'Pipeline complete.'
+            echo 'Pipeline failed — check logs.'
         }
     }
 }
